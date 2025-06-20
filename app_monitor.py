@@ -1,4 +1,3 @@
-monitor-precos / app_monitor.py in main
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -8,7 +7,7 @@ import re
 import json
 
 st.set_page_config(page_title="Monitor de Preços", layout="wide")
-st.title("📊 Monitor de Preços em Marketplaces")
+st.title("Monitor de Preços em Marketplaces")
 
 # Sidebar: lista de produtos em JSON
 produtos_input = st.sidebar.text_area(
@@ -21,43 +20,44 @@ produtos_input = st.sidebar.text_area(
 )
 try:
     produtos = json.loads(produtos_input)
-except:
+except json.JSONDecodeError:
     produtos = []
     st.sidebar.error("JSON inválido")
 
 def checar_item(item):
     resp = requests.get(item["url"], headers={"User-Agent":"Mozilla/5.0"})
     html = resp.text
-    dispo, preco, vendedor = False, "—", item["marketplace"]
+    disponivel, preco, vendedor = False, "—", item["marketplace"]
 
     if item["marketplace"] == "Beleza na Web":
         sellers = re.findall(r'Vendido por\s+([^<\n]+)', html)
         prices  = re.findall(r'R\$\s*[\d\.,]+', html)
         if prices:
             nums = [float(p.replace("R$","").replace(".","").replace(",", ".")) for p in prices]
-            i = nums.index(min(nums))
-            dispo, preco = True, prices[i]
-            vendedor = sellers[i] if i < len(sellers) else vendedor
+            idx = nums.index(min(nums))
+            disponivel, preco = True, prices[idx]
+            if idx < len(sellers):
+                vendedor = sellers[idx]
 
     elif item["marketplace"] == "Riachuelo":
         tag = BeautifulSoup(html, "html.parser").select_one("span.price-sales__value")
         if tag:
-            dispo, preco = True, tag.get_text(strip=True)
+            disponivel, preco = True, tag.get_text(strip=True)
 
     return {
         "Timestamp":   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Marketplace": item["marketplace"],
-        "Disponível":  dispo,
+        "Disponível":  disponivel,
         "Preço":       preco,
         "Vendedor":    vendedor
     }
 
-if st.button("▶️ Rodar Monitoramento"):
+if st.sidebar.button("Rodar Monitoramento"):
     if not produtos:
-        st.warning("Liste pelo menos um produto válido em JSON na barra lateral")
+        st.warning("Adicione pelo menos um produto em JSON na barra lateral.")
     else:
         resultados = [checar_item(p) for p in produtos]
         df = pd.DataFrame(resultados)
-        st.dataframe(df)
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ Baixar CSV", csv, "monitoramento.csv", "text/csv")
+        st.dataframe(df, use_container_width=True)
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        st.download_button("Download CSV", csv_bytes, "monitoramento.csv", "text/csv")
